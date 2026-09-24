@@ -1,0 +1,12 @@
+Installation finished.
+
+1. If you enabled the service task, LlamaCppKortex should already be running.
+2. Open http://127.0.0.1:11434/ for the WebUI.
+3. Point ModelsDir in config\llama.env at your GGUF folder, then restart the service
+   (tray menu or: nssm restart LlamaCppKortex).
+
+Need NSSM?
+  winget install NSSM.NSSM
+
+Docs & releases:
+  https://github.com/Kortexio/LlamaCppKortexio

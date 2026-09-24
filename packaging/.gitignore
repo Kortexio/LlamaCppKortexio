@@ -1,0 +1,6 @@
+# Packaging artifacts (built locally; Setup.exe goes to GitHub Releases)
+/output/
+/payload/bin/
+/payload/LlamaCpp.Tray.exe
+*.exe
+!output/.gitkeep

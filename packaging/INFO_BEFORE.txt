@@ -1,0 +1,24 @@
+LlamaCppKortexio Windows package
+================================
+
+This installer ships three pieces in one setup:
+
+  1. llama-server.exe (CUDA) with the built-in WebUI (--webui)
+  2. OpenAI-compatible API on http://127.0.0.1:11434
+  3. System tray monitor (LlamaCpp.Tray.exe)
+
+Requirements
+------------
+- Windows 10/11 x64
+- NVIDIA GPU with recent Game Ready / Studio driver
+- NSSM (for the Windows service). If missing, install with:
+    winget install NSSM.NSSM
+
+After install
+-------------
+- Service name: LlamaCppKortex
+- WebUI / API:  http://127.0.0.1:11434
+- Models: edit config\llama.env (ModelsDir) and config\models-preset.ini
+- Default context: 65536 with q4_0 KV cache
+
+Source: https://github.com/Kortexio/LlamaCppKortexio

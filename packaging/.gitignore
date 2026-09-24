@@ -2,5 +2,11 @@
 /output/
 /payload/bin/
 /payload/LlamaCpp.Tray.exe
-*.exe
-!output/.gitkeep
+# Do not ignore small helper scripts
+!payload/scripts/
+!payload/scripts/**
+!payload/tray/
+!payload/tray/**
+!payload/*.ps1
+!payload/*.txt
+!payload/*.ico

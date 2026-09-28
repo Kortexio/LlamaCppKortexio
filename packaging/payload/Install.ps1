@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Post-install: NSSM service LlamaCppKortex + tray autostart.
+  Post-install: NSSM service LlamaCppKortex + single PowerShell tray autostart.
 #>
 [CmdletBinding()]
 param(
@@ -24,7 +24,6 @@ try {
     $bin = Join-Path $InstallDir "bin"
     $scripts = Join-Path $InstallDir "scripts"
     $runBat = Join-Path $scripts "run-server.bat"
-    $trayExe = Join-Path $InstallDir "LlamaCpp.Tray.exe"
     $logDir = Join-Path $InstallDir "logs"
     New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
@@ -49,6 +48,9 @@ try {
         throw "nssm.exe not found. Install via: winget install NSSM.NSSM"
     }
     L "nssm=$nssm"
+
+    # Stop legacy Tray.exe so we never end with two icons
+    Get-Process "LlamaCpp.Tray" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
     $name = "LlamaCppKortex"
     if (Get-Service -Name $name -ErrorAction SilentlyContinue) {
@@ -76,22 +78,33 @@ try {
     $svc = Get-Service $name
     L "service status=$($svc.Status)"
 
-    if (Test-Path $trayExe) {
+    # Single tray: PowerShell Kortex tray (includes Settings). Not LlamaCpp.Tray.exe.
+    $trayBat = Join-Path $InstallDir "Start-KortexTray.bat"
+    $trayVbs = Join-Path $InstallDir "tray\Start-LlamaTray.vbs"
+    $trayLaunch = if (Test-Path $trayBat) { $trayBat } elseif (Test-Path $trayVbs) { $trayVbs } else { $null }
+
+    if ($trayLaunch) {
         $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
         New-Item -Path $runKey -Force | Out-Null
-        Set-ItemProperty -Path $runKey -Name "LlamaCppTray" -Value "`"$trayExe`"" -Type String
-        L "tray Run key set"
+        Set-ItemProperty -Path $runKey -Name "LlamaCppTray" -Value "`"$trayLaunch`"" -Type String
+        L "tray Run key set -> $trayLaunch"
 
         $taskName = "LlamaCppTrayLogon"
         Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-        $action = New-ScheduledTaskAction -Execute $trayExe -WorkingDirectory $InstallDir
+        $action = New-ScheduledTaskAction -Execute $trayLaunch -WorkingDirectory $InstallDir
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
         $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
         Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
         L "scheduled task $taskName registered"
 
-        Start-Process -FilePath $trayExe -WorkingDirectory $InstallDir
-        L "tray launched"
+        $startup = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
+        Get-ChildItem $startup -Filter "*Kortex*Tray*" -EA SilentlyContinue | Remove-Item -Force -EA SilentlyContinue
+        Get-ChildItem $startup -Filter "*Llama.cpp*Tray*" -EA SilentlyContinue | Remove-Item -Force -EA SilentlyContinue
+
+        Start-Process -FilePath $trayLaunch -WorkingDirectory $InstallDir
+        L "tray launched (single entrypoint)"
+    } else {
+        L "WARN: no tray launcher found"
     }
 
     L "OK"

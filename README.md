@@ -17,7 +17,7 @@ Default endpoint after install: `http://127.0.0.1:11434/`
 
 ## Windows installer
 
-Download the latest **`LlamaCppKortexio-Setup-*.exe`** from [Releases](https://github.com/Kortexio/LlamaCppKortexio/releases).
+Download the latest **`LlamaCppKortexio-Setup-*.exe (current: 1.1.0)`** from [Releases](https://github.com/Kortexio/LlamaCppKortexio/releases).
 
 Requirements:
 
@@ -105,3 +105,4 @@ Upstream llama.cpp / ggml components keep their original licenses (MIT). Kortexi
 - Releases (installer): https://github.com/Kortexio/LlamaCppKortexio/releases  
 - Issues: https://github.com/Kortexio/LlamaCppKortexio/issues  
 - Prism Bonsai models: https://huggingface.co/collections/prism-ml/bonsai  
+

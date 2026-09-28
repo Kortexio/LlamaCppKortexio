@@ -12,6 +12,13 @@ $script:InstallRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $script:LogDir    = Join-Path $script:InstallRoot 'logs'
 $script:LastStatus = 'unknown'
 
+# Single-instance mutex (avoid two tray icons)
+$script:TrayMutex = New-Object System.Threading.Mutex($false, 'Global\LlamaCppKortexTray')
+if (-not $script:TrayMutex.WaitOne(0, $false)) {
+  [System.Windows.Forms.MessageBox]::Show('Kortex tray ja esta a correr.', 'Llama.cpp Kortex') | Out-Null
+  exit 0
+}
+
 function Show-Settings {
   $settings = Join-Path $PSScriptRoot 'KortexSettings.ps1'
   if (-not (Test-Path $settings)) {
@@ -175,6 +182,8 @@ $miExit.add_Click({
   $timer.Stop()
   $notify.Visible = $false
   $notify.Dispose()
+  try { $script:TrayMutex.ReleaseMutex() } catch {}
+  try { $script:TrayMutex.Dispose() } catch {}
   [System.Windows.Forms.Application]::Exit()
 })
 $notify.add_DoubleClick({ Start-Process $script:WebUiUrl })

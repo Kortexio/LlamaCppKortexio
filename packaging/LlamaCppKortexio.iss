@@ -1,4 +1,4 @@
-; LlamaCppKortexio Windows installer
+﻿; LlamaCppKortexio Windows installer
 ; Bundles: llama-server (embedded WebUI) + CUDA runtime DLLs + tray + NSSM post-install
 
 #define MyAppName "LlamaCppKortexio"
@@ -51,10 +51,13 @@ Source: "payload\LlamaCpp.Tray.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\llamacpp.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\Install.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\Uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "payload\KortexSettings.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "payload\KortexSettings.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\README-INSTALL.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 [Icons]
 Name: "{group}\{#MyAppName} Tray"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{group}\Kortex Settings"; Filename: "{app}\KortexSettings.bat"; WorkingDir: "{app}"
 Name: "{group}\Open WebUI"; Filename: "http://127.0.0.1:11434/"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
@@ -80,3 +83,4 @@ function InitializeSetup(): Boolean;
 begin
   Result := True;
 end;
+

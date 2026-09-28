@@ -1,5 +1,5 @@
-﻿#Requires -Version 5.1
-# Llama.cpp Kortex â€” system tray monitor
+#Requires -Version 5.1
+# Llama.cpp Kortex — system tray monitor
 $ErrorActionPreference = 'Continue'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -8,8 +8,18 @@ $script:HealthUrl = 'http://127.0.0.1:11434/health'
 $script:WebUiUrl  = 'http://127.0.0.1:11434/'
 $script:SvcLlama  = 'LlamaCppKortex'
 $script:SvcTunnel = 'KortexioOllamaTunnel'
-$script:LogDir = Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))) 'logs'
+$script:InstallRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+$script:LogDir    = Join-Path $script:InstallRoot 'logs'
 $script:LastStatus = 'unknown'
+
+function Show-Settings {
+  $settings = Join-Path $PSScriptRoot 'KortexSettings.ps1'
+  if (-not (Test-Path $settings)) {
+    [System.Windows.Forms.MessageBox]::Show("KortexSettings.ps1 nao encontrado.`r`n$settings") | Out-Null
+    return
+  }
+  Start-Process powershell -ArgumentList '-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',$settings
+}
 
 function New-StatusIcon([string]$colorName) {
   $bmp = New-Object System.Drawing.Bitmap 16,16
@@ -114,6 +124,7 @@ $notify.Text = 'Llama.cpp Kortex'
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $miOpen   = $menu.Items.Add('Abrir WebUI')
 $miStatus = $menu.Items.Add('Mostrar estado')
+$miSettings = $menu.Items.Add('Definicoes do servidor...')
 $menu.Items.Add('-') | Out-Null
 $miStart  = $menu.Items.Add('Iniciar servico')
 $miStop   = $menu.Items.Add('Parar servico')
@@ -152,6 +163,7 @@ $miStatus.add_Click({
   $form.ShowInTaskbar = $true
   $form.Activate()
 })
+$miSettings.add_Click({ Show-Settings })
 $miStart.add_Click({ Start-ElevatedNssm 'start' })
 $miStop.add_Click({ Start-ElevatedNssm 'stop' })
 $miRest.add_Click({ Start-ElevatedNssm 'restart' })

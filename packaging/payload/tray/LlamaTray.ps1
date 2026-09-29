@@ -19,13 +19,24 @@ if (-not $script:TrayMutex.WaitOne(0, $false)) {
   exit 0
 }
 
+function Start-HiddenPowerShellFile([string]$file) {
+  $psi = New-Object System.Diagnostics.ProcessStartInfo
+  $psi.FileName = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+  $psi.Arguments = "-NoProfile -NoLogo -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$file`""
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+  [void][System.Diagnostics.Process]::Start($psi)
+}
+
 function Show-Settings {
   $settings = Join-Path $PSScriptRoot 'KortexSettings.ps1'
   if (-not (Test-Path $settings)) {
     [System.Windows.Forms.MessageBox]::Show("KortexSettings.ps1 nao encontrado.`r`n$settings") | Out-Null
     return
   }
-  Start-Process powershell -ArgumentList '-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',$settings
+  # Separate process, no console window (CreateNoWindow)
+  Start-HiddenPowerShellFile $settings
 }
 
 function New-StatusIcon([string]$colorName) {
@@ -100,10 +111,15 @@ function Start-ElevatedNssm([string]$action) {
 if ('$action' -eq 'restart' -or '$action' -eq 'start') {
   try { & `$nssm restart $($script:SvcTunnel) } catch {}
 }
-"@ | Set-Content -Path $tmp -Encoding UTF8
-  Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$tmp -Wait
+"@ | Set-Content -Path $tmp -Encoding ASCII
+  # Hidden elevated via VBS (avoids Admin PowerShell flash)
+  $vbs = Join-Path $env:TEMP ('llama-tray-' + [guid]::NewGuid().ToString('N') + '.vbs')
+  $arg = "-NoProfile -NoLogo -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$tmp`""
+  $vbsBody = "CreateObject(""Shell.Application"").ShellExecute ""powershell.exe"", ""$arg"", """", ""runas"", 0"
+  [IO.File]::WriteAllText($vbs, $vbsBody)
+  Start-Process wscript.exe -ArgumentList "//nologo","`"$vbs`"" -Wait
   Start-Sleep 2
-  Remove-Item $tmp -Force -EA SilentlyContinue
+  Remove-Item $tmp, $vbs -Force -EA SilentlyContinue
   Update-TrayStatus
 }
 

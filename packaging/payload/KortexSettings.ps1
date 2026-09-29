@@ -1,20 +1,35 @@
 #Requires -Version 5.1
-# Kortex Settings form — edits config\llama.env + regenerates scripts\run-server.bat
+# Kortex Settings - polished WinForms UI (ASCII-safe, no scroll)
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+$script:Bg       = [System.Drawing.Color]::FromArgb(24, 24, 28)
+$script:BgPanel  = [System.Drawing.Color]::FromArgb(32, 32, 38)
+$script:BgInput  = [System.Drawing.Color]::FromArgb(40, 40, 48)
+$script:Fg       = [System.Drawing.Color]::FromArgb(236, 236, 240)
+$script:FgMuted  = [System.Drawing.Color]::FromArgb(150, 150, 160)
+$script:Accent   = [System.Drawing.Color]::FromArgb(46, 160, 140)
+$script:AccentDk = [System.Drawing.Color]::FromArgb(36, 128, 112)
+$script:FontUi   = New-Object System.Drawing.Font 'Segoe UI', 9
+$script:FontTitle = New-Object System.Drawing.Font 'Segoe UI Semibold', 13
+$script:FontSec  = New-Object System.Drawing.Font 'Segoe UI Semibold', 9
 
 function Get-KortexInstallRoot {
   if ($PSScriptRoot) {
     $cand = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     if (Test-Path (Join-Path $cand 'scripts\run-server.bat')) { return $cand }
+    if (Test-Path (Join-Path $PSScriptRoot 'scripts\run-server.bat')) { return $PSScriptRoot }
   }
-  foreach ($p in @('C:\LlamaCppKortexio', 'C:\LlamaCppKortex', "${env:ProgramFiles}\LlamaCppKortexio")) {
+  foreach ($p in @('C:\LlamaCppKortex', 'C:\LlamaCppKortexio', "${env:ProgramFiles}\LlamaCppKortexio")) {
     if (Test-Path (Join-Path $p 'scripts\run-server.bat')) { return $p }
   }
   return 'C:\LlamaCppKortex'
 }
 
 function Read-LlamaEnv([string]$path) {
-  $cfg = [ordered]@{}
+  $cfg = @{}
   if (-not (Test-Path $path)) { return $cfg }
   Get-Content $path | Where-Object { $_ -match '=' -and $_ -notmatch '^\s*#' } | ForEach-Object {
     $k, $v = $_ -split '=', 2
@@ -23,250 +38,287 @@ function Read-LlamaEnv([string]$path) {
   return $cfg
 }
 
-function Write-LlamaEnv([string]$path, [hashtable]$cfg) {
-  $lines = @(
-    '# LlamaCppKortexio / Kortex stack',
-    "ModelsDir=$($cfg.ModelsDir)",
-    "Host=$($cfg.Host)",
-    "Port=$($cfg.Port)",
-    "DefaultModel=$($cfg.DefaultModel)",
-    "GpuLayers=$($cfg.GpuLayers)",
-    "CtxSize=$($cfg.CtxSize)",
-    "Parallel=$($cfg.Parallel)",
-    "FlashAttn=$($cfg.FlashAttn)",
-    "ModelsMax=$($cfg.ModelsMax)",
-    "Threads=$($cfg.Threads)",
-    "CacheTypeK=$($cfg.CacheTypeK)",
-    "CacheTypeV=$($cfg.CacheTypeV)",
-    "Agent=$($cfg.Agent)",
-    "Tools=$($cfg.Tools)",
-    "Reasoning=$($cfg.Reasoning)",
-    "ReasoningEffort=$($cfg.ReasoningEffort)",
-    "ReasoningBudget=$($cfg.ReasoningBudget)",
-    "ReasoningPreserve=$($cfg.ReasoningPreserve)",
-    "WebUI=$($cfg.WebUI)",
-    "MediaPath=$($cfg.MediaPath)"
+function Write-LlamaEnv([string]$path, $cfg) {
+  $keys = @(
+    'ModelsDir','Host','Port','DefaultModel','GpuLayers','CtxSize','Parallel','FlashAttn',
+    'ModelsMax','Threads','CacheTypeK','CacheTypeV','Agent','Tools','Reasoning','ReasoningEffort',
+    'ReasoningBudget','ReasoningPreserve','WebUI','MediaPath'
   )
-  $dir = Split-Path $path -Parent
-  New-Item -ItemType Directory -Path $dir -Force | Out-Null
-  Set-Content -Path $path -Value $lines -Encoding ASCII
+  $lines = New-Object System.Collections.Generic.List[string]
+  [void]$lines.Add('# LlamaCppKortexio / Kortex stack')
+  foreach ($k in $keys) { [void]$lines.Add("$k=$($cfg[$k])") }
+  New-Item -ItemType Directory -Path (Split-Path $path) -Force | Out-Null
+  [IO.File]::WriteAllLines($path, $lines.ToArray(), [Text.Encoding]::ASCII)
 }
 
-function Write-RunServerBat([string]$batPath, [hashtable]$cfg) {
+function Write-RunServerBat([string]$batPath, $cfg) {
   $root = Split-Path (Split-Path $batPath -Parent) -Parent
   $preset = Join-Path $root 'config\models-preset.ini'
-  $hostA = if ($cfg.Host) { $cfg.Host } else { '127.0.0.1' }
-  $port = if ($cfg.Port) { $cfg.Port } else { '11434' }
-  $ngl = if ($cfg.GpuLayers) { $cfg.GpuLayers } else { '99' }
-  $ctx = if ($cfg.CtxSize) { $cfg.CtxSize } else { '65536' }
-  $par = if ($cfg.Parallel) { $cfg.Parallel } else { '1' }
-  $mmax = if ($cfg.ModelsMax) { $cfg.ModelsMax } else { '1' }
-  $fa = if ($cfg.FlashAttn) { $cfg.FlashAttn } else { 'on' }
-  $th = if ($cfg.Threads) { $cfg.Threads } else { '1' }
-  $ctk = if ($cfg.CacheTypeK) { $cfg.CacheTypeK } else { 'q4_0' }
-  $ctv = if ($cfg.CacheTypeV) { $cfg.CacheTypeV } else { 'q4_0' }
-  $rea = if ($cfg.Reasoning) { $cfg.Reasoning } else { 'auto' }
-  $eff = if ($cfg.ReasoningEffort) { $cfg.ReasoningEffort } else { 'medium' }
-  $bud = if ($cfg.ReasoningBudget) { $cfg.ReasoningBudget } else { '-1' }
-  $tools = if ($cfg.Tools) { $cfg.Tools } else { 'all' }
-  $media = $cfg.MediaPath
+  $hostA = $cfg['Host']; if (-not $hostA) { $hostA = '127.0.0.1' }
+  $port = $cfg['Port']; if (-not $port) { $port = '11434' }
+  $ngl = $cfg['GpuLayers']; if (-not $ngl) { $ngl = '99' }
+  $ctx = $cfg['CtxSize']; if (-not $ctx) { $ctx = '65536' }
+  $par = $cfg['Parallel']; if (-not $par) { $par = '1' }
+  $mmax = $cfg['ModelsMax']; if (-not $mmax) { $mmax = '1' }
+  $fa = $cfg['FlashAttn']; if (-not $fa) { $fa = 'on' }
+  $th = $cfg['Threads']; if (-not $th) { $th = '1' }
+  $ctk = $cfg['CacheTypeK']; if (-not $ctk) { $ctk = 'q4_0' }
+  $ctv = $cfg['CacheTypeV']; if (-not $ctv) { $ctv = 'q4_0' }
+  $rea = $cfg['Reasoning']; if (-not $rea) { $rea = 'auto' }
+  $eff = $cfg['ReasoningEffort']; if (-not $eff) { $eff = 'medium' }
+  $bud = $cfg['ReasoningBudget']; if (-not $bud) { $bud = '-1' }
+  $tools = $cfg['Tools']; if (-not $tools) { $tools = 'all' }
 
-  $args = @(
-    "--models-preset `"$preset`"",
-    "--host $hostA",
-    "--port $port",
-    "-ngl $ngl",
-    "-c $ctx",
-    "--parallel $par",
-    "--models-max $mmax",
-    "-fa $fa",
-    "--threads $th",
-    "-ctk $ctk",
-    "-ctv $ctv",
-    "--jinja",
-    "--reasoning $rea",
-    "--reasoning-effort $eff",
-    "--reasoning-budget $bud"
-  )
-  if ($cfg.ReasoningPreserve -match '^(1|true|on|yes)$') { $args += '--reasoning-preserve' }
-  if ($cfg.Agent -match '^(1|true|on|yes)$') { $args += '--agent' }
-  if ($tools) { $args += "--tools $tools" }
-  if ($media) { $args += "--media-path `"$media`"" }
-  if ($cfg.WebUI -notmatch '^(0|false|off|no)$') { $args += '--webui' }
+  $a = New-Object System.Collections.Generic.List[string]
+  [void]$a.Add("--models-preset `"$preset`"")
+  [void]$a.Add("--host $hostA"); [void]$a.Add("--port $port")
+  [void]$a.Add("-ngl $ngl"); [void]$a.Add("-c $ctx")
+  [void]$a.Add("--parallel $par"); [void]$a.Add("--models-max $mmax")
+  [void]$a.Add("-fa $fa"); [void]$a.Add("--threads $th")
+  [void]$a.Add("-ctk $ctk"); [void]$a.Add("-ctv $ctv")
+  [void]$a.Add('--jinja')
+  [void]$a.Add("--reasoning $rea")
+  [void]$a.Add("--reasoning-effort $eff")
+  [void]$a.Add("--reasoning-budget $bud")
+  if ($cfg['ReasoningPreserve'] -match '^(1|true|on|yes)$') { [void]$a.Add('--reasoning-preserve') }
+  if ($cfg['Agent'] -match '^(1|true|on|yes)$') { [void]$a.Add('--agent') }
+  if ($tools) { [void]$a.Add("--tools $tools") }
+  if ($cfg['MediaPath']) { [void]$a.Add("--media-path `"$($cfg['MediaPath'])`"") }
+  if ($cfg['WebUI'] -notmatch '^(0|false|off|no)$') { [void]$a.Add('--webui') }
 
-  $bat = @"
-@echo off
-setlocal
-set ROOT=%~dp0..
-set PATH=%ROOT%\bin;%PATH%
-cd /d "%ROOT%\bin"
-"%ROOT%\bin\llama-server.exe" $($args -join ' ')
-"@
+  $joined = [string]::Join(' ', $a.ToArray())
+  $bat = "@echo off`r`nsetlocal`r`nset ROOT=%~dp0..`r`nset PATH=%ROOT%\bin;%PATH%`r`ncd /d `"%ROOT%\bin`"`r`n`"%ROOT%\bin\llama-server.exe`" $joined`r`n"
   New-Item -ItemType Directory -Path (Split-Path $batPath) -Force | Out-Null
-  Set-Content -Path $batPath -Value $bat.TrimEnd() -Encoding ASCII
+  [IO.File]::WriteAllText($batPath, $bat, [Text.Encoding]::ASCII)
 }
 
-function Show-KortexSettingsForm {
-  Add-Type -AssemblyName System.Windows.Forms
-  Add-Type -AssemblyName System.Drawing
-
-  $root = Get-KortexInstallRoot
-  $envPath = Join-Path $root 'config\llama.env'
-  $batPath = Join-Path $root 'scripts\run-server.bat'
-  $cfg = Read-LlamaEnv $envPath
-
-  # defaults
-  $d = @{
-    ModelsDir = 'D:\Models\gguf'; Host = '127.0.0.1'; Port = '11434'
-    DefaultModel = 'bonsai-2-27b.gguf'; GpuLayers = '99'; CtxSize = '65536'
-    Parallel = '1'; FlashAttn = 'on'; ModelsMax = '1'; Threads = '1'
-    CacheTypeK = 'q4_0'; CacheTypeV = 'q4_0'; Agent = 'on'; Tools = 'all'
-    Reasoning = 'auto'; ReasoningEffort = 'medium'; ReasoningBudget = '-1'
-    ReasoningPreserve = 'on'; WebUI = 'on'; MediaPath = 'D:\'
-  }
-  foreach ($k in $d.Keys) { if (-not $cfg[$k]) { $cfg[$k] = $d[$k] } }
-
-  $form = New-Object System.Windows.Forms.Form
-  $form.Text = "Kortex Settings — $root"
-  $form.Size = New-Object System.Drawing.Size 520, 520
-  $form.StartPosition = 'CenterScreen'
-  $form.FormBorderStyle = 'FixedDialog'
-  $form.MaximizeBox = $false
-  $form.Font = New-Object System.Drawing.Font 'Segoe UI', 9
-
-  $y = 16
-  function Add-LabeledText([string]$label, [string]$key, [int]$width = 320) {
-    $lbl = New-Object System.Windows.Forms.Label
-    $lbl.Text = $label
-    $lbl.Location = New-Object System.Drawing.Point 16, $script:y
-    $lbl.Size = New-Object System.Drawing.Size 140, 22
-    $tb = New-Object System.Windows.Forms.TextBox
-    $tb.Text = [string]$cfg[$key]
-    $tb.Location = New-Object System.Drawing.Point 160, ($script:y - 2)
-    $tb.Size = New-Object System.Drawing.Size $width, 24
-    $tb.Tag = $key
-    $form.Controls.AddRange(@($lbl, $tb))
-    $script:fields += $tb
-    $script:y += 32
-    return $tb
-  }
-  function Add-LabeledCombo([string]$label, [string]$key, [string[]]$items) {
-    $lbl = New-Object System.Windows.Forms.Label
-    $lbl.Text = $label
-    $lbl.Location = New-Object System.Drawing.Point 16, $script:y
-    $lbl.Size = New-Object System.Drawing.Size 140, 22
-    $cb = New-Object System.Windows.Forms.ComboBox
-    $cb.DropDownStyle = 'DropDownList'
-    $cb.Items.AddRange($items)
-    $val = [string]$cfg[$key]
-    if ($items -contains $val) { $cb.SelectedItem = $val } else { $cb.SelectedIndex = 0 }
-    $cb.Location = New-Object System.Drawing.Point 160, ($script:y - 2)
-    $cb.Size = New-Object System.Drawing.Size 200, 24
-    $cb.Tag = $key
-    $form.Controls.AddRange(@($lbl, $cb))
-    $script:fields += $cb
-    $script:y += 32
-    return $cb
-  }
-
-  $script:y = $y
-  $script:fields = @()
-
-  Add-LabeledText 'ModelsDir' 'ModelsDir' | Out-Null
-  Add-LabeledText 'Default model' 'DefaultModel' | Out-Null
-  Add-LabeledText 'Context (-c)' 'CtxSize' 120 | Out-Null
-  Add-LabeledText 'GPU layers' 'GpuLayers' 80 | Out-Null
-  Add-LabeledText 'Parallel slots' 'Parallel' 80 | Out-Null
-  Add-LabeledText 'Threads' 'Threads' 80 | Out-Null
-  Add-LabeledCombo 'KV cache K' 'CacheTypeK' @('q4_0','q8_0','f16') | Out-Null
-  Add-LabeledCombo 'KV cache V' 'CacheTypeV' @('q4_0','q8_0','f16') | Out-Null
-  Add-LabeledCombo 'Flash Attn' 'FlashAttn' @('on','off','auto') | Out-Null
-  Add-LabeledCombo 'Reasoning' 'Reasoning' @('auto','on','off') | Out-Null
-  Add-LabeledCombo 'Effort (Bonsai)' 'ReasoningEffort' @('xhigh','medium','low') | Out-Null
-  Add-LabeledText 'Reasoning budget' 'ReasoningBudget' 100 | Out-Null
-  Add-LabeledCombo 'Agent' 'Agent' @('on','off') | Out-Null
-  Add-LabeledText 'MediaPath' 'MediaPath' | Out-Null
-
-  $hint = New-Object System.Windows.Forms.Label
-  $hint.Text = "Estas opcoes exigem reiniciar o servico LlamaCppKortex.`r`nSampling (temp, top_p) continua na WebUI / API."
-  $hint.Location = New-Object System.Drawing.Point 16, ($script:y + 4)
-  $hint.Size = New-Object System.Drawing.Size 470, 36
-  $hint.ForeColor = [System.Drawing.Color]::DimGray
-  $form.Controls.Add($hint)
-
-  $btnSave = New-Object System.Windows.Forms.Button
-  $btnSave.Text = 'Guardar'
-  $btnSave.Location = New-Object System.Drawing.Point 160, 440
-  $btnSave.Size = New-Object System.Drawing.Size 100, 28
-
-  $btnSaveRestart = New-Object System.Windows.Forms.Button
-  $btnSaveRestart.Text = 'Guardar + Reiniciar'
-  $btnSaveRestart.Location = New-Object System.Drawing.Point 270, 440
-  $btnSaveRestart.Size = New-Object System.Drawing.Size 130, 28
-
-  $btnCancel = New-Object System.Windows.Forms.Button
-  $btnCancel.Text = 'Cancelar'
-  $btnCancel.Location = New-Object System.Drawing.Point 410, 440
-  $btnCancel.Size = New-Object System.Drawing.Size 80, 28
-  $btnCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-
-  function Collect-Config {
-    $out = @{} + $cfg
-    foreach ($c in $script:fields) {
-      $key = [string]$c.Tag
-      if ($c -is [System.Windows.Forms.ComboBox]) { $out[$key] = [string]$c.SelectedItem }
-      else { $out[$key] = $c.Text.Trim() }
-    }
-    # keep preserve/webui/tools/host/port/modelsmax from previous if not on form
-    if (-not $out.ReasoningPreserve) { $out.ReasoningPreserve = 'on' }
-    if (-not $out.WebUI) { $out.WebUI = 'on' }
-    if (-not $out.Tools) { $out.Tools = 'all' }
-    if (-not $out.Host) { $out.Host = '127.0.0.1' }
-    if (-not $out.Port) { $out.Port = '11434' }
-    if (-not $out.ModelsMax) { $out.ModelsMax = '1' }
-    return $out
-  }
-
-  $btnSave.add_Click({
-    try {
-      $newCfg = Collect-Config
-      Write-LlamaEnv $envPath $newCfg
-      Write-RunServerBat $batPath $newCfg
-      [System.Windows.Forms.MessageBox]::Show("Guardado.`r`n$envPath`r`n$batPath", 'Kortex Settings') | Out-Null
-    } catch {
-      [System.Windows.Forms.MessageBox]::Show("Erro: $_", 'Kortex Settings') | Out-Null
-    }
-  })
-
-  $btnSaveRestart.add_Click({
-    try {
-      $newCfg = Collect-Config
-      Write-LlamaEnv $envPath $newCfg
-      Write-RunServerBat $batPath $newCfg
-      $tmp = Join-Path $env:TEMP ("kortex-settings-restart-" + [guid]::NewGuid().ToString('N') + ".ps1")
-      @"
-`$nssm = (Get-Command nssm.exe -EA SilentlyContinue).Source
-if (-not `$nssm) { `$nssm = "`$env:LOCALAPPDATA\Microsoft\WinGet\Links\nssm.exe" }
-& `$nssm restart LlamaCppKortex
-"@ | Set-Content $tmp -Encoding UTF8
-      Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File',$tmp -Wait
-      Start-Sleep 1
-      Remove-Item $tmp -Force -EA SilentlyContinue
-      [System.Windows.Forms.MessageBox]::Show('Guardado e servico reiniciado.', 'Kortex Settings') | Out-Null
-      $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
-      $form.Close()
-    } catch {
-      [System.Windows.Forms.MessageBox]::Show("Erro: $_", 'Kortex Settings') | Out-Null
-    }
-  })
-
-  $form.Controls.AddRange(@($btnSave, $btnSaveRestart, $btnCancel))
-  $form.AcceptButton = $btnSaveRestart
-  $form.CancelButton = $btnCancel
-  [void]$form.ShowDialog()
+function New-FlatButton([string]$text, [Drawing.Color]$bg, [Drawing.Color]$fg, [bool]$primary=$false) {
+  $b = New-Object System.Windows.Forms.Button
+  $b.Text = $text
+  $b.FlatStyle = 'Flat'
+  $b.FlatAppearance.BorderSize = 0
+  $b.BackColor = $bg
+  $b.ForeColor = $fg
+  $b.Cursor = [System.Windows.Forms.Cursors]::Hand
+  $b.Font = if ($primary) { New-Object System.Drawing.Font 'Segoe UI Semibold', 9 } else { $script:FontUi }
+  $b.Height = 32
+  return $b
 }
 
-# Allow dot-sourcing or direct run
-if ($MyInvocation.InvocationName -ne '.') {
-  Show-KortexSettingsForm
+function New-Section([string]$title, [int]$x, [int]$y, [int]$w, [int]$h) {
+  $p = New-Object System.Windows.Forms.Panel
+  $p.Location = New-Object System.Drawing.Point $x, $y
+  $p.Size = New-Object System.Drawing.Size $w, $h
+  $p.BackColor = $script:BgPanel
+  $hdr = New-Object System.Windows.Forms.Label
+  $hdr.Text = $title
+  $hdr.Font = $script:FontSec
+  $hdr.ForeColor = $script:Accent
+  $hdr.Location = New-Object System.Drawing.Point 14, 10
+  $hdr.AutoSize = $true
+  $p.Controls.Add($hdr)
+  return $p
 }
+
+function Add-Field([System.Windows.Forms.Control]$parent, [string]$label, [string]$key, [int]$x, [int]$y, [int]$w, [string[]]$combo=$null) {
+  $lbl = New-Object System.Windows.Forms.Label
+  $lbl.Text = $label
+  $lbl.ForeColor = $script:FgMuted
+  $lbl.Font = $script:FontUi
+  $lbl.Location = New-Object System.Drawing.Point $x, $y
+  $lbl.Size = New-Object System.Drawing.Size $w, 16
+  $parent.Controls.Add($lbl)
+
+  if ($combo) {
+    $c = New-Object System.Windows.Forms.ComboBox
+    $c.DropDownStyle = 'DropDownList'
+    $c.FlatStyle = 'Flat'
+    foreach ($it in $combo) { [void]$c.Items.Add($it) }
+    $val = [string]$script:cfg[$key]
+    if ($combo -contains $val) { $c.SelectedItem = $val } else { $c.SelectedIndex = 0 }
+  } else {
+    $c = New-Object System.Windows.Forms.TextBox
+    $c.BorderStyle = 'FixedSingle'
+    $c.Text = [string]$script:cfg[$key]
+  }
+  $c.BackColor = $script:BgInput
+  $c.ForeColor = $script:Fg
+  $c.Font = $script:FontUi
+  $c.Location = New-Object System.Drawing.Point $x, ($y + 18)
+  $c.Size = New-Object System.Drawing.Size $w, 26
+  $c.Tag = $key
+  $parent.Controls.Add($c)
+  [void]$script:fields.Add($c)
+  return $c
+}
+
+$root = Get-KortexInstallRoot
+$envPath = Join-Path $root 'config\llama.env'
+$batPath = Join-Path $root 'scripts\run-server.bat'
+$script:cfg = Read-LlamaEnv $envPath
+$script:defaults = @{
+  ModelsDir='D:\Models\gguf'; Host='127.0.0.1'; Port='11434'; DefaultModel='bonsai-2-27b.gguf'
+  GpuLayers='99'; CtxSize='65536'; Parallel='1'; FlashAttn='on'; ModelsMax='1'; Threads='1'
+  CacheTypeK='q4_0'; CacheTypeV='q4_0'; Agent='on'; Tools='all'; Reasoning='auto'
+  ReasoningEffort='medium'; ReasoningBudget='-1'; ReasoningPreserve='on'; WebUI='on'; MediaPath='D:\'
+}
+foreach ($k in $script:defaults.Keys) {
+  if (-not $script:cfg.ContainsKey($k) -or [string]::IsNullOrWhiteSpace([string]$script:cfg[$k])) {
+    $script:cfg[$k] = $script:defaults[$k]
+  }
+}
+
+$script:fields = New-Object System.Collections.ArrayList
+
+# Fixed geometry - everything visible, no scroll
+$cw = 640
+$ch = 720
+$pad = 16
+$secW = $cw - (2 * $pad)
+$gap = 12
+$col = [int](($secW - 28 - $gap) / 2)
+$xL = 14
+$xR = $xL + $col + $gap
+
+$form = New-Object System.Windows.Forms.Form
+$form.Text = 'Kortexio - Server Settings'
+$form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
+$form.AutoScroll = $false
+$form.ClientSize = New-Object System.Drawing.Size $cw, $ch
+$form.StartPosition = 'CenterScreen'
+$form.FormBorderStyle = 'FixedDialog'
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+$form.BackColor = $script:Bg
+$form.Font = $script:FontUi
+$form.ShowInTaskbar = $true
+try {
+  $ico = Join-Path $root 'llamacpp.ico'
+  if (Test-Path $ico) { $form.Icon = New-Object System.Drawing.Icon $ico }
+} catch {}
+
+# Header
+$hdr = New-Object System.Windows.Forms.Panel
+$hdr.Location = New-Object System.Drawing.Point 0, 0
+$hdr.Size = New-Object System.Drawing.Size $cw, 56
+$hdr.BackColor = $script:BgPanel
+$t = New-Object System.Windows.Forms.Label
+$t.Text = 'Server Settings'
+$t.Font = $script:FontTitle
+$t.ForeColor = $script:Fg
+$t.Location = New-Object System.Drawing.Point 18, 8
+$t.AutoSize = $true
+$s = New-Object System.Windows.Forms.Label
+$s.Text = $root
+$s.ForeColor = $script:FgMuted
+$s.Location = New-Object System.Drawing.Point 20, 32
+$s.AutoSize = $true
+$hdr.Controls.Add($t)
+$hdr.Controls.Add($s)
+$form.Controls.Add($hdr)
+
+# PATHS
+$pPaths = New-Section 'PATHS' $pad 68 $secW 148
+Add-Field $pPaths 'Models folder' 'ModelsDir' $xL 32 ($secW - 28) | Out-Null
+Add-Field $pPaths 'Default model' 'DefaultModel' $xL 80 $col | Out-Null
+Add-Field $pPaths 'Media path' 'MediaPath' $xR 80 $col | Out-Null
+$form.Controls.Add($pPaths)
+
+# GPU / CONTEXT
+$pGpu = New-Section 'GPU  /  CONTEXT' $pad 228 $secW 236
+Add-Field $pGpu 'Context size' 'CtxSize' $xL 32 $col | Out-Null
+Add-Field $pGpu 'GPU layers' 'GpuLayers' $xR 32 $col | Out-Null
+Add-Field $pGpu 'Threads' 'Threads' $xL 80 $col | Out-Null
+Add-Field $pGpu 'Parallel slots' 'Parallel' $xR 80 $col | Out-Null
+Add-Field $pGpu 'KV cache K' 'CacheTypeK' $xL 128 $col @('q4_0','q8_0','f16') | Out-Null
+Add-Field $pGpu 'KV cache V' 'CacheTypeV' $xR 128 $col @('q4_0','q8_0','f16') | Out-Null
+Add-Field $pGpu 'Flash Attn' 'FlashAttn' $xL 176 $col @('on','off','auto') | Out-Null
+$form.Controls.Add($pGpu)
+
+# REASONING / AGENT
+$pReason = New-Section 'REASONING  /  AGENT' $pad 476 $secW 120
+Add-Field $pReason 'Reasoning' 'Reasoning' $xL 32 $col @('auto','on','off') | Out-Null
+Add-Field $pReason 'Effort (Bonsai)' 'ReasoningEffort' $xR 32 $col @('xhigh','medium','low') | Out-Null
+Add-Field $pReason 'Reasoning budget' 'ReasoningBudget' $xL 80 $col | Out-Null
+Add-Field $pReason 'Agent mode' 'Agent' $xR 80 $col @('on','off') | Out-Null
+$form.Controls.Add($pReason)
+
+$note = New-Object System.Windows.Forms.Label
+$note.Text = 'Changing these options restarts the LlamaCppKortex service. Sampling (temp, top_p) stays in the WebUI / API.'
+$note.ForeColor = $script:FgMuted
+$note.Location = New-Object System.Drawing.Point $pad, 608
+$note.Size = New-Object System.Drawing.Size $secW, 32
+$form.Controls.Add($note)
+
+$btnCancel = New-FlatButton 'Cancel' $script:BgInput $script:Fg
+$btnCancel.Location = New-Object System.Drawing.Point ($cw - 360), 652
+$btnCancel.Width = 100
+$btnCancel.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+
+$btnSave = New-FlatButton 'Save' $script:BgInput $script:Fg
+$btnSave.Location = New-Object System.Drawing.Point ($cw - 250), 652
+$btnSave.Width = 100
+
+$btnApply = New-FlatButton 'Save and Restart' $script:Accent ([System.Drawing.Color]::White) $true
+$btnApply.Location = New-Object System.Drawing.Point ($cw - 140), 652
+$btnApply.Width = 124
+$btnApply.FlatAppearance.MouseOverBackColor = $script:AccentDk
+
+$form.Controls.Add($btnCancel)
+$form.Controls.Add($btnSave)
+$form.Controls.Add($btnApply)
+$form.CancelButton = $btnCancel
+
+function Collect-Config {
+  $out = @{}
+  foreach ($k in $script:cfg.Keys) { $out[$k] = $script:cfg[$k] }
+  foreach ($c in $script:fields) {
+    $key = [string]$c.Tag
+    if ($c -is [System.Windows.Forms.ComboBox]) { $out[$key] = [string]$c.SelectedItem }
+    else { $out[$key] = $c.Text.Trim() }
+  }
+  foreach ($k in @('ReasoningPreserve','WebUI','Tools','Host','Port','ModelsMax')) {
+    if (-not $out[$k]) { $out[$k] = $script:defaults[$k] }
+  }
+  return $out
+}
+
+$btnSave.Add_Click({
+  try {
+    $newCfg = Collect-Config
+    Write-LlamaEnv $envPath $newCfg
+    Write-RunServerBat $batPath $newCfg
+    $script:cfg = $newCfg
+    [System.Windows.Forms.MessageBox]::Show('Settings saved. Restart the service to apply.', 'Kortexio', 'OK', 'Information') | Out-Null
+  } catch {
+    [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Kortexio', 'OK', 'Error') | Out-Null
+  }
+})
+
+$btnApply.Add_Click({
+  try {
+    $newCfg = Collect-Config
+    Write-LlamaEnv $envPath $newCfg
+    Write-RunServerBat $batPath $newCfg
+    $tmp = Join-Path $env:TEMP ('kortex-restart-' + [guid]::NewGuid().ToString('N') + '.ps1')
+    $ps = @(
+      '$ErrorActionPreference = "Stop"'
+      '$nssm = (Get-Command nssm.exe -EA SilentlyContinue).Source'
+      'if (-not $nssm) { $nssm = "$env:LOCALAPPDATA\Microsoft\WinGet\Links\nssm.exe" }'
+      '& $nssm restart LlamaCppKortex'
+    ) -join "`r`n"
+    [IO.File]::WriteAllText($tmp, $ps)
+    $vbs = Join-Path $env:TEMP ('kortex-restart-' + [guid]::NewGuid().ToString('N') + '.vbs')
+    $vbsBody = "CreateObject(`"Shell.Application`").ShellExecute `"powershell.exe`", `"-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"`"$tmp`"`"`", `"`", `"runas`", 0"
+    [IO.File]::WriteAllText($vbs, $vbsBody)
+    Start-Process wscript.exe -ArgumentList $vbs -Wait
+    Start-Sleep 2
+    Remove-Item $tmp, $vbs -Force -EA SilentlyContinue
+    [System.Windows.Forms.MessageBox]::Show('Saved and service restart requested.', 'Kortexio', 'OK', 'Information') | Out-Null
+    $form.Close()
+  } catch {
+    [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Kortexio', 'OK', 'Error') | Out-Null
+  }
+})
+
+[void]$form.ShowDialog()

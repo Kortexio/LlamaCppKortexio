@@ -1,2 +1,3 @@
 @echo off
-start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0tray\KortexSettings.ps1"
+REM Thin wrapper — prefer KortexSettings.vbs to avoid console flash
+wscript.exe //nologo "%~dp0KortexSettings.vbs"

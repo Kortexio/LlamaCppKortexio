@@ -50,12 +50,13 @@ Source: "payload\Install.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\Uninstall.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\KortexSettings.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\KortexSettings.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "payload\KortexSettings.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\Start-KortexTray.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "payload\README-INSTALL.txt"; DestDir: "{app}"; Flags: ignoreversion isreadme
 
 [Icons]
 Name: "{group}\{#MyAppName} Tray"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{group}\Kortex Settings"; Filename: "{app}\KortexSettings.bat"; WorkingDir: "{app}"
+Name: "{group}\Kortex Settings"; Filename: "wscript.exe"; Parameters: "//nologo ""{app}\KortexSettings.vbs"""; WorkingDir: "{app}"
 Name: "{group}\Open WebUI"; Filename: "http://127.0.0.1:11434/"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
@@ -74,3 +75,4 @@ Filename: "http://127.0.0.1:11434/"; Description: "Open WebUI"; Flags: postinsta
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\Uninstall.ps1"" -InstallDir ""{app}"""; \
   RunOnceId: "KortexUninstallCleanup"; Flags: runhidden waituntilterminated
+
